@@ -10,8 +10,8 @@ class ProductService:
     def __init__(self, session: Session):
         self.session = session
 
-    def get_all(self) -> List[Product]:
-        return self.session.exec(select(Product)).all()
+    def get_all(self, skip: int = 0, limit: int = 100) -> List[Product]:
+        return self.session.exec(select(Product).offset(skip).limit(limit)).all()
 
     def get_by_id(self, product_id: int) -> Product:
         product = self.session.get(Product, product_id)
@@ -20,9 +20,6 @@ class ProductService:
         return product
 
     def create(self, data: ProductCreate) -> Product:
-        if data.stock < 0:
-            raise InvalidStockException(detail="El stock no puede ser negativo")
-
         existing = self.session.exec(
             select(Product).where(Product.name == data.name)
         ).first()
@@ -39,8 +36,12 @@ class ProductService:
         product = self.get_by_id(product_id)
         update_data = data.model_dump(exclude_unset=True)
 
-        if "stock" in update_data and update_data["stock"] < 0:
-            raise InvalidStockException()
+        if "name" in update_data and update_data["name"] != product.name:
+            existing = self.session.exec(
+                select(Product).where(Product.name == update_data["name"])
+            ).first()
+            if existing:
+                raise ProductAlreadyExistsException(update_data["name"])
 
         for key, value in update_data.items():
             setattr(product, key, value)
